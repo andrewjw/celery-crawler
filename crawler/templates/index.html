@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block body %}
+    <form action="/search" method="get">
+        <input name="q" type="text">
+        <input type="submit">
+    </form>
+
+    <hr>
+
+    <p>{{ doc_count }} pages in index.</p>
+
+    <hr>
+
+    <h2>Top Pages</h2>
+
+    <ol>
+    {% for page in top_docs %}
+        <li><a href="{{ page.url }}">{{ page.url }}</a> - {{ page.rank }}</li>
+    {% endfor %}
+    </ol>
+{% endblock %}

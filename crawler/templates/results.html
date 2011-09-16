@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block body %}
+    <form action="/search" method="get">
+        <input name="q" type="text" value="{{ q }}">
+        <input type="submit">
+    </form>
+
+    {% for result in results|slice:":20" %}
+        <p>
+            <b><a href="{{ result.url }}">{{ result.title|safe }}</a></b> ({{ result.score }}, {{ result.rank }}, {{ result.combined }})<br>
+            {{ result.desc|safe }}
+        </p>
+    {% endfor %}
+{% endblock %}
