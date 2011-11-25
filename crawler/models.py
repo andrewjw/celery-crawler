@@ -34,7 +34,7 @@ class Page(Document):
         parse = urlparse(self.url)
 
         robotstxt = RobotsTxt.get_by_domain(parse.scheme, parse.netloc)
-        if not robotstxt.is_allowed(parse.netloc):
+        if not robotstxt.is_allowed(self.url):
             return False
 
         while cache.get(parse.netloc) is not None:
