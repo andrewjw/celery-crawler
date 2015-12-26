@@ -1,67 +1,50 @@
-from datetime import datetime
-import re
-import time
-from urlparse import urlparse
-from utils import unescape
-
+from lxml.html import document_fromstring
+from urllib.parse import urlparse, urljoin
+from celerycrawler import settings
 from celery.decorators import task
+from celerycrawler.models import Page, RobotsTxt
+from celerycrawler.utils import unescape
 
-from crawler.models import Page, RobotsTxt
-
-import settings
 
 @task
 def retrieve_page(url, rank=None):
-    print "retrieve_page %s" % (url, )
-    if url.startswith("http://showmedo.com") or url.startswith("http://www.rentacarnow.com"):
-        return
-    page = Page.get_by_url(url)
+    print("retrieve_page {}".format(url))
+    page = Page.get_by_url(url, update=True)
     if page is None:
+        print("Page is None")
         return
 
     if rank is not None:
         page.rank = rank
         page.store(settings.db)
 
-    assert page.id is not None
-    find_links.delay(page.id)
+    if page.id is None:
+        page.update()
 
-link_single_re = re.compile(r"<a[^>]+href='([^']+)'")
-link_double_re = re.compile(r'<a[^>]+href="([^"]+)"')
+    find_links.delay(page.id)
 
 @task
 def find_links(doc_id):
+    print("in find_links")
     if doc_id is None:
-        return
+        print("doc_id = None")
+        return False
 
     doc = Page.load(settings.db, doc_id)
 
-    if doc.content is None:
-        print "Got None for the content of %s -> %s." % (doc_id, doc.url)
-        return
+    if not hasattr(doc, 'content'):
+        print("Got None for the content of %s -> %s." % (doc_id, doc.url))
+        return False
+    elif not doc['content']:
+        print("tasks.py:elif not doc.content")
+        return False
 
     raw_links = []
-    for match in link_single_re.finditer(doc.content):
-        raw_links.append(match.group(1))
-
-    for match in link_double_re.finditer(doc.content):
-        raw_links.append(match.group(1))
-
-    doc.links = []
-    for link in raw_links:
-        if link.startswith("#"):
-            continue
-        elif link.startswith("http://") or link.startswith("https://"):
-            pass
-        elif link.startswith("/"):
-            parse = urlparse(doc["url"])
-            link = parse.scheme + "://" + parse.netloc + link
-        else:
-            link = "/".join(doc["url"].split("/")[:-1]) + "/" + link
-
-        doc.links.append(unescape(link.split("#")[0]))
-
-    print "find_links %s -> %i" % (doc.url, len(doc.links))
+    tree = document_fromstring(doc.content)
+    for a in tree.xpath('//a'):
+        link = urljoin(doc['url'], a.get('href'))
+        doc.links.append(link)
+    
     doc.store(settings.db)
 
     calculate_rank.delay(doc.id)
@@ -73,8 +56,11 @@ def find_links(doc_id):
         else:
             retrieve_page.delay(link)
 
+    print("find_links {} -> {}".format(doc.url, len(doc.links)))
+
 @task
 def calculate_rank(doc_id):
+    print("in calculate_rank")
     page = Page.load(settings.db, doc_id)
 
     links = Page.get_links_to_url(page.url)
@@ -87,12 +73,13 @@ def calculate_rank(doc_id):
     page.rank = rank * 0.85
 
     if page.rank == 0:
-        page.rank = 1.0/settings.db.view("page/by_url", limit=0).total_rows
+        n_links = settings.db.view("page/by_url", limit=0).total_rows
+        page.rank = 1.0 / n_links
 
     if abs(old_rank - page.rank) > 0.0001:
-        print "%s: %s -> %s" % (page.url, old_rank, page.rank)
+        print("%s: %s -> %s" % (page.url, old_rank, page.rank))
         page.store(settings.db)
-
+        
         for link in page.links:
             p = Page.get_id_by_url(link, update=False)
             if p is not None:

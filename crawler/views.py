@@ -1,8 +1,8 @@
 from django.shortcuts import render_to_response
 from whoosh.qparser import QueryParser
 
-from crawler.indexer import get_searcher, schema
-from crawler.models import Page
+from celerycrawler.indexer import get_searcher, schema
+from celerycrawler.models import Page
 
 def index(req):
     return render_to_response("index.html", { "doc_count": Page.count(), "top_docs": Page.get_top_by_rank(limit=20) })

@@ -16,8 +16,8 @@ def unescape(text):
                return unichr(int(text[3:-1], 16))
             else:
                return unichr(int(text[2:-1]))
-         except ValueError:
-            print "erreur de valeur"
+         except ValueError as e:
+            print("ValueError: {}".format(e))
             pass
       else:
          # named entity
@@ -29,10 +29,10 @@ def unescape(text):
             elif text[1:-1] == "lt":
                text = "&amp;lt;"
             else:
-               print text[1:-1]
+               print(text[1:-1])
                text = unichr(htmlentitydefs.name2codepoint[text[1:-1]])
          except KeyError:
-            print "keyerror"
+            print("keyerror")
             pass
       return text # leave as is
    return re.sub("&#?\w+;", fixup, text)
