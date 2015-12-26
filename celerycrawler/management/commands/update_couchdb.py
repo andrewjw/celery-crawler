@@ -2,6 +2,7 @@ import couchdb
 import glob
 import os
 
+from celerycrawler import settings
 from django.core.management.base import NoArgsCommand
 
 class Command(NoArgsCommand):
@@ -10,8 +11,6 @@ class Command(NoArgsCommand):
     can_import_settings = True
 
     def handle_noargs(self, **options):
-        import settings
-
         couchdir = os.path.realpath(os.path.split(__file__)[0] + "../../../couchviews")
 
         databases = glob.glob(couchdir+"/*")

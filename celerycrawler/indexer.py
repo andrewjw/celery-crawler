@@ -3,7 +3,13 @@ import os
 from whoosh import index
 from whoosh.fields import *
 
-schema = Schema(title=TEXT(stored=True), url=ID(stored=True, unique=True), desc=ID(stored=True), rank=NUMERIC(stored=True, type=float), content=TEXT)
+schema = Schema(
+    title=TEXT(stored=True),
+    url=ID(stored=True, unique=True),
+    desc=ID(stored=True),
+    rank=NUMERIC(stored=True, numtype=float),
+    raw=TEXT,
+    content=TEXT)
 
 _ix = None
 

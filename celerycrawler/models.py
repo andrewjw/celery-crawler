@@ -1,55 +1,57 @@
-import base64
-from datetime import datetime
 import pickle
-from robotparser import RobotFileParser
 import time
-from urlparse import urlparse
-from urllib2 import urlopen, Request, HTTPError, install_opener, build_opener, HTTPRedirectHandler
+import requests
 
-from django.core.cache import cache
-
+from celerycrawler import settings
+from datetime import datetime
+from urllib.parse import urlparse
+from urllib.robotparser import RobotFileParser
+from urllib.request import urlopen, Request, HTTPError
+from urllib.request import install_opener, build_opener, HTTPRedirectHandler
 from couchdb.mapping import Document, TextField, DateTimeField, ListField, FloatField
-
-import settings
+from django.core.cache import cache
 
 install_opener(build_opener(HTTPRedirectHandler()))
 
 class Page(Document):
     type = TextField(default="page")
-
     url = TextField()
-
+    raw = TextField()
     content = TextField()
-
     links = ListField(TextField())
-
     rank = FloatField(default=0)
-
     last_checked = DateTimeField(default=datetime.now)
 
     def is_valid(self):
         return (datetime.now() - self.last_checked).days < 7
 
     def update(self):
+        print("updating page")
+        
         parse = urlparse(self.url)
-
         robotstxt = RobotsTxt.get_by_domain(parse.scheme, parse.netloc)
-        if not robotstxt.is_allowed(self.url):
-            return False
+        #if not robotstxt.is_allowed(self.url):
+        #    return False
 
         while cache.get(parse.netloc) is not None:
             time.sleep(1)
+
         cache.set(parse.netloc, True, 10)
 
-        print "getting", self.url
-        req = Request(self.url, None, { "User-Agent": settings.USER_AGENT })
+        print("getting: {}".format(self.url))
+        resp = requests.get(self.url, headers={'User-Agent':
+                                               settings.USER_AGENT})
 
-        resp = urlopen(req)
-        if not resp.info()["Content-Type"].startswith("text/html"):
+        ctype = resp.headers['content-type']
+        if not ctype.startswith("text/html"):
+            print("unsupported content-type: {}".format(ctype))
             return
-        self.content = resp.read().decode("utf8")
-        self.last_checked = datetime.now()
 
+        print("setting Page.content...")
+        self.content = resp.text
+        self.raw = resp.text
+
+        self.last_checked = datetime.now()
         self.store(settings.db)
 
     @staticmethod
@@ -76,7 +78,7 @@ class Page(Document):
             return None
         else:
             doc = Page(url=url)
-
+        print("Page.get_by_url: doc.update() ...")
         doc.update()
 
         return doc
@@ -106,34 +108,28 @@ class RobotsTxt(Document):
     robot_parser_pickle = TextField()
 
     def _get_robot_parser(self):
-        if self.robot_parser_pickle is not None:
-            return pickle.loads(base64.b64decode(self.robot_parser_pickle))
-        else:
-            parser = RobotFileParser()
-            parser.set_url(self.protocol + "://" + self.domain + "/robots.txt")
-            self.robot_parser = parser
+        parser = RobotFileParser()
+        parser.set_url(self.protocol + "://" + self.domain + "/robots.txt")
 
-            return parser
-    def _set_robot_parser(self, parser):
-        self.robot_parser_pickle = base64.b64encode(pickle.dumps(parser))
-    robot_parser = property(_get_robot_parser, _set_robot_parser)
+        return parser
 
     def is_valid(self):
-        return (time.time() - self.robot_parser.mtime()) < 7*24*60*60
+        parser = self._get_robot_parser()
+        return (time.time() - parser.mtime()) < 7*24*60*60
 
     def is_allowed(self, url):
-        return self.robot_parser.can_fetch(settings.USER_AGENT, url)
+        parser = self._get_robot_parser()
+        return parser.can_fetch(settings.USER_AGENT, url)
 
     def update(self):
         while cache.get(self.domain) is not None:
             time.sleep(1)
         cache.set(self.domain, True, 10)
 
-        print "getting %s://%s/robots.txt" % (self.protocol, self.domain)
-        parser = self.robot_parser
+        print("getting %s://%s/robots.txt" % (self.protocol, self.domain))
+        parser = self._get_robot_parser()
         parser.read()
         parser.modified()
-        self.robot_parser = parser
 
         self.store(settings.db)
 
