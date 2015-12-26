@@ -111,7 +111,6 @@ CELERY_QUEUES = {"retrieve": {"exchange": "default",
 
 
 class Router(object):
-
     def route_for_task(self, task, args=None, kwargs=None):
         if task == "celerycrawler.tasks.retrieve_page":
             return { "queue": "retrieve" }
@@ -128,4 +127,4 @@ try:
 except:
     db = server["celerycrawler"]
 
-USER_AGENT = "LowNICMangChuLa; AkPodGafeiPiDPil"
+USER_AGENT = 'ua'
